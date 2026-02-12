@@ -1,78 +1,135 @@
-// ============================================================
-// OpenClaw Configuration
-// ============================================================
-// JSON5 format (comments + trailing commas allowed).
-// Full reference: https://docs.openclaw.ai/gateway/configuration
-//
-// This file is read by the OpenClaw gateway on startup.
-// Edit it and restart the gateway to apply changes.
-// ============================================================
 {
-  // --- Agent workspace ---
-  agents: {
-    defaults: {
-      workspace: "~/.openclaw/workspace",
-
-      // Sandboxing: run tool execution in isolated Docker containers.
-      // Requires Docker socket mounted. Recommended for security.
-      sandbox: {
-        mode: "non-main",       // off | non-main | all
-        scope: "agent",         // session | agent | shared
-        workspaceAccess: "rw",  // none | ro | rw
-      },
-    },
-
-    list: [
+  "gateway": { "mode": "local", "auth": { "mode": "token" } },
+  "agents": {
+    "defaults": { "model": { "primary": "openrouter/qwen/qwen3-coder-next" } },
+    "list": [
       {
-        id: "main",
-        identity: {
-          name: "Claw",
-          emoji: "🦞",
-        },
-        // Group chat: respond when mentioned by name or emoji
-        groupChat: {
-          mentionPatterns: ["@Claw", "🦞"],
-        },
+        "id": "coordinator",
+        "default": true,
+        "identity": { "name": "Zoo Keeper", "emoji": "\ud83e\udd8d" },
+        "workspace": "/home/node/.openclaw/workspace",
+        "groupChat": {
+          "mentionPatterns": [
+            "@DeFiZoo",
+            "@defizoo",
+            "@Zoo Keeper",
+            "@zookeeper"
+          ]
+        }
       },
-    ],
+      {
+        "id": "frontend",
+        "identity": { "name": "Frontend Falcon", "emoji": "\ud83e\udd85" },
+        "workspace": "/home/node/.openclaw/workspace-frontend",
+        "groupChat": {
+          "mentionPatterns": ["@DeFiZoo", "@defizoo", "Frontend", "frontend"]
+        }
+      },
+      {
+        "id": "backend",
+        "identity": { "name": "API Alligator", "emoji": "\ud83d\udc0a" },
+        "workspace": "/home/node/.openclaw/workspace-backend",
+        "groupChat": {
+          "mentionPatterns": ["@DeFiZoo", "@defizoo", "Backend", "backend"]
+        }
+      },
+      {
+        "id": "solidity",
+        "identity": { "name": "Solidity Shark", "emoji": "\ud83e\udd88" },
+        "workspace": "/home/node/.openclaw/workspace-solidity",
+        "groupChat": {
+          "mentionPatterns": ["@DeFiZoo", "@defizoo", "Solidity", "solidity"]
+        }
+      },
+      {
+        "id": "hr",
+        "identity": { "name": "HR Horse", "emoji": "\ud83d\udc34" },
+        "workspace": "/home/node/.openclaw/workspace-hr",
+        "groupChat": { "mentionPatterns": ["@DeFiZoo", "@defizoo", "HR", "hr"] }
+      },
+      {
+        "id": "marketing",
+        "identity": { "name": "Marketing Monkey", "emoji": "\ud83d\udc35" },
+        "workspace": "/home/node/.openclaw/workspace-marketing",
+        "groupChat": {
+          "mentionPatterns": ["@DeFiZoo", "@defizoo", "Marketing", "marketing"]
+        }
+      }
+    ]
   },
-
-  // --- Discord channel ---
-  // Docs: https://docs.openclaw.ai/channels/discord
-  channels: {
-    discord: {
-      enabled: true,
-      // Token comes from DISCORD_BOT_TOKEN env var (no need to repeat here)
-
-      // DM policy: "pairing" requires approval, "open" allows anyone
-      dm: {
-        enabled: true,
-        policy: "pairing",
-      },
-
-      // Guild (server) settings
-      // Replace YOUR_GUILD_ID with your Discord server ID
-      // (Right-click server name → Copy Server ID with Developer Mode on)
-      guilds: {
-        "*": {
-          requireMention: true,   // Only respond when @mentioned
-        },
-        // Uncomment and customize for your server:
-        // "YOUR_GUILD_ID": {
-        //   requireMention: true,
-        //   users: ["YOUR_USER_ID"],  // Only allow specific users
-        //   channels: {
-        //     "general": { allow: true, requireMention: true },
-        //     "bot-chat": { allow: true, requireMention: false },
-        //   },
-        // },
-      },
+  "bindings": [
+    {
+      "agentId": "frontend",
+      "match": {
+        "channel": "discord",
+        "peer": { "kind": "channel", "id": "1470104434695471124" }
+      }
     },
+    {
+      "agentId": "backend",
+      "match": {
+        "channel": "discord",
+        "peer": { "kind": "channel", "id": "1470104452051763363" }
+      }
+    },
+    {
+      "agentId": "solidity",
+      "match": {
+        "channel": "discord",
+        "peer": { "kind": "channel", "id": "1470104466031116453" }
+      }
+    },
+    {
+      "agentId": "hr",
+      "match": {
+        "channel": "discord",
+        "peer": { "kind": "channel", "id": "1470104475011121264" }
+      }
+    },
+    {
+      "agentId": "marketing",
+      "match": {
+        "channel": "discord",
+        "peer": { "kind": "channel", "id": "1470173926410686620" }
+      }
+    },
+    { "agentId": "coordinator", "match": { "channel": "discord" } }
+  ],
+  "tools": {
+    "agentToAgent": {
+      "enabled": true,
+      "allow": [
+        "coordinator",
+        "frontend",
+        "backend",
+        "solidity",
+        "hr",
+        "marketing"
+      ]
+    },
+    "web": { "search": { "enabled": true }, "fetch": { "enabled": true } },
+    "exec": { "pathPrepend": ["/usr/local/bin"] }
   },
-
-  // --- Logging ---
-  logging: {
-    level: "info",
-    consoleStyle: "pretty",
+  "channels": {
+    "discord": {
+      "enabled": true,
+      "dm": { "enabled": true, "policy": "pairing" },
+      "guilds": {
+        "1470071409240969389": {
+          "requireMention": true,
+          "channels": {
+            "1470104434695471124": { "allow": true, "requireMention": false },
+            "1470104452051763363": { "allow": true, "requireMention": false },
+            "1470104466031116453": { "allow": true, "requireMention": false },
+            "1470104475011121264": { "allow": true, "requireMention": false },
+            "1470173926410686620": { "allow": true, "requireMention": false },
+            "*": { "allow": true, "requireMention": true }
+          }
+        }
+      },
+      "historyLimit": 30
+    }
   },
+  "commands": { "native": "auto", "text": true, "config": true },
+  "logging": { "level": "info", "consoleStyle": "pretty" }
 }

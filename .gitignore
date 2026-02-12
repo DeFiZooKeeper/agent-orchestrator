@@ -15,3 +15,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Brain repos — each is its own git repo, cloned via setup-brains.sh
+brains/
+workspace/brains/

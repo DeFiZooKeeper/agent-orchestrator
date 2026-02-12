@@ -1,91 +1,113 @@
 # ============================================================
-# Agent Orchestrator — Docker Compose
+# DeFiZoo Agent Orchestrator — Docker Compose
 # ============================================================
-# Runs OpenClaw (https://openclaw.ai) in Docker with
-# Discord, GitHub, and coding tools.
+# Runs OpenClaw with multi-agent routing:
+#   coordinator  → general questions, DMs, cross-domain coordination
+#   frontend     → frontend development (brains/frontend)
+#   backend      → backend development (brains/backend)
+#   solidity     → Solidity / smart contracts (brains/solidity)
+#   hr           → HR / people ops (brains/hr)
 #
 # Quick start:
-#   cp .env.example .env        # fill in your tokens
+#   cp .env.example .env        # fill in your tokens + Discord IDs
+#   ./setup-brains.sh           # clone/init brain repos
 #   docker compose up -d        # build + start
 #   docker compose logs -f      # watch it boot
 #
-# CLI commands (while gateway is running):
-#   docker compose exec openclaw openclaw health
-#   docker compose exec openclaw openclaw doctor
-#   docker compose exec openclaw openclaw channels status
-#   docker compose exec openclaw openclaw dashboard --no-open
-#
-# Docs: https://docs.openclaw.ai/install/docker
+# Docs: https://docs.openclaw.ai/channels/discord
+#       https://docs.openclaw.ai/concepts/multi-agent
 # ============================================================
+
+version: '3.8'
 
 services:
   openclaw:
-    # Build directly from the OpenClaw repo — uses their Dockerfile.
-    # Pin to a release tag for stability, or use #main for latest.
     build:
-      context: "https://github.com/openclaw/openclaw.git#main"
+      context: "https://github.com/openclaw/openclaw.git#v2026.2.6"
       dockerfile: Dockerfile
     container_name: openclaw-gateway
     restart: unless-stopped
     init: true
+    user: root
 
     ports:
       - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
 
     environment:
       - HOME=/home/node
-      - NODE_ENV=production
       - TERM=xterm-256color
+      - NODE_ENV=production
       - TZ=${TZ:-UTC}
       # Gateway
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
       - OPENCLAW_GATEWAY_BIND=${OPENCLAW_GATEWAY_BIND:-lan}
       - OPENCLAW_GATEWAY_PORT=18789
       - OPENCLAW_DISABLE_BONJOUR=1
-      # LLM providers (set at least one)
+      # LLM providers
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       # Discord
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
-      # GitHub
+      # GitHub — used for authenticated git operations
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
-      # PATH — include tool install locations
+      - GITHUB_ORG=${GITHUB_ORG:-DeFiZooKeeper}
+      # PATH
       - PATH=/home/node/.local/bin:/home/node/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
 
     volumes:
-      # Persistent OpenClaw state (sessions, credentials, memory)
-      - openclaw_state:/home/node/.openclaw
-      # Our workspace (skills, AGENTS.md, SOUL.md) — bind-mounted from repo
+      - openclaw_config:/home/node/.openclaw
+      # Config (read-only)
+      - ./state:/mnt/state:ro
+      # Coordinator workspace
       - ./workspace:/home/node/.openclaw/workspace
-      # Our config — bind-mounted from repo (read-only)
-      - ./state/openclaw.json:/home/node/.openclaw/openclaw.json:ro
-      # Docker socket for agent sandboxing (code execution in containers)
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Persistent tool installs (survive container rebuilds)
-      - openclaw_local_bin:/home/node/.local/bin
-      - openclaw_npm_global:/home/node/.npm-global
+      # Brain repos → agent workspaces
+      - ./brains/frontend:/home/node/.openclaw/workspace-frontend
+      - ./brains/backend:/home/node/.openclaw/workspace-backend
+      - ./brains/solidity:/home/node/.openclaw/workspace-solidity
+      - ./brains/hr:/home/node/.openclaw/workspace-hr
+      - ./brains/marketing:/home/node/.openclaw/workspace-marketing
 
     command:
       - sh
       - "-c"
       - |
-        # Create directories
-        mkdir -p ~/.local/bin ~/.local/share ~/.npm-global
+        # Create required directories
+        mkdir -p ~/.local/bin ~/.local/share ~/.npm-global \
+                 ~/.openclaw/credentials
+
+        # Create agent session directories
+        for agent in coordinator frontend backend solidity hr marketing; do
+          mkdir -p ~/.openclaw/agents/$agent/sessions
+        done
 
         # Create openclaw CLI alias
         echo '#!/bin/sh' > ~/.local/bin/openclaw
-        echo 'exec node /app/dist/index.js "$$@"' >> ~/.local/bin/openclaw
+        echo 'exec node /app/dist/index.js "$@"' >> ~/.local/bin/openclaw
         chmod +x ~/.local/bin/openclaw
 
-        # Install gh CLI for GitHub PR workflows (if not already installed)
-        which gh >/dev/null 2>&1 || npm install -g --prefix ~/.npm-global gh 2>/dev/null || true
+        # --- Configure git identity for the agent ---
+        git config --global user.name "Zoo Keeper"
+        git config --global user.email "zookeeper@defizoo.ai"
+        git config --global init.defaultBranch main
 
-        # Run doctor to fix any config issues
-        openclaw doctor --fix 2>/dev/null || true
+        # --- Install OpenCode CLI if not present ---
+        if ! command -v opencode >/dev/null 2>&1; then
+          echo "[setup] Installing OpenCode CLI..."
+          npm install -g opencode-ai 2>/dev/null \
+            && echo "[setup] opencode installed" \
+            || echo "[setup] opencode install failed (non-fatal)"
+        fi
 
+        # Run doctor first
+        openclaw doctor
         sleep 1
-        # Start gateway (exec replaces shell — proper signal handling)
+
+        # Apply our config
+        cp /mnt/state/openclaw.json ~/.openclaw/openclaw.json
+
+        # Start gateway
         exec node dist/index.js gateway --bind lan --port 18789 --allow-unconfigured
 
     healthcheck:
@@ -93,12 +115,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 120s
 
 volumes:
-  openclaw_state:
-    name: openclaw_state
-  openclaw_local_bin:
-    name: openclaw_local_bin
-  openclaw_npm_global:
-    name: openclaw_npm_global
+  openclaw_config:
+    name: openclaw_config
