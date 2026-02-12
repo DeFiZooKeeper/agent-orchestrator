@@ -1,10 +1,14 @@
-# The Zoo — AI Agent Orchestrator
+# 🦍 Zoo Keeper — Agent Orchestrator
 
-A team of specialized AI agents that handle software development, marketing, HR, and coordination for DeFiZoo. Each agent is a domain expert with its own personality, memory, and workspace — coordinated by a central agent called Zoo Keeper.
+Zoo Keeper is the coordinator agent for **The Zoo**, DeFiZoo's internal AI platform. It routes messages, triages requests, coordinates cross-domain work between specialist agents, and provisions new agents.
+
+This repo contains the OpenClaw gateway configuration, Zoo Keeper's brain, and the orchestration layer that ties all agents together. Each specialist agent has its own brain repo — they're cloned into `brains/` and mounted as isolated workspaces.
 
 Built on [OpenClaw](https://docs.openclaw.ai), running in a single Docker container.
 
-## Architecture
+## The Zoo — Architecture
+
+Zoo Keeper sits at the center of a hub-and-spoke multi-agent system. Specialists handle domain work; Zoo Keeper handles routing and coordination.
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
@@ -46,9 +50,11 @@ Built on [OpenClaw](https://docs.openclaw.ai), running in a single Docker contai
 
 ## The Agents
 
+Zoo Keeper coordinates seven agents, each with an isolated workspace, its own brain repo, persistent memory, and a distinct personality.
+
 | Agent | Channel | Domain |
 |-------|---------|--------|
-| 🦍 Zoo Keeper | All (mention required) | Routing, triage, cross-domain coordination |
+| 🦍 **Zoo Keeper** | All (mention required) | Routing, triage, cross-domain coordination |
 | 🦅 Frontend Falcon | `#frontend` | React, Next.js, UI/UX |
 | 🐊 API Alligator | `#backend` | APIs, NestJS, databases, infra |
 | 🦈 Solidity Shark | `#solidity` | Smart contracts, DeFi, Hardhat/Foundry |
@@ -56,7 +62,7 @@ Built on [OpenClaw](https://docs.openclaw.ai), running in a single Docker contai
 | 🐵 Marketing Monkey | `#marketing` | Brand, social media, content, campaigns |
 | 🕷️ Sprint Spider | `#sprint` | Coding pipeline orchestration |
 
-Each agent has an isolated workspace, its own brain repo on GitHub, persistent memory, and a distinct personality. Messages in bound channels go directly to the assigned agent — no @mention needed.
+Messages in bound channels go directly to the assigned specialist — no @mention needed. Everything else falls through to Zoo Keeper (mention required). Specialists route through Zoo Keeper for cross-domain work; no direct specialist-to-specialist messaging.
 
 ## How It Works
 
@@ -111,7 +117,7 @@ docker compose logs -f
 
 ### Brain Repos
 
-Each specialist agent needs a brain repo cloned into `brains/`. The setup script handles this, or run manually:
+Each specialist agent has its own brain repo on GitHub (`DeFiZooKeeper/<id>-brain`). They're cloned into `brains/` and mounted as isolated workspaces inside the container.
 
 ```bash
 ./setup-brains.sh
@@ -137,11 +143,11 @@ Full Discord docs: [docs.openclaw.ai/channels/discord](https://docs.openclaw.ai/
 
 ### Agent routing
 
-Edit `state/openclaw.json` to configure channel-to-agent bindings, guild lockdown, and mention requirements. Each agent is bound to a Discord channel — messages there route directly without @mention. Everything else falls through to Zoo Keeper (mention required).
+Edit `state/openclaw.json` to configure channel-to-agent bindings, guild lockdown, and mention requirements.
 
-### Agent personality & behavior
+### Zoo Keeper's brain
 
-Each agent's behavior is defined by markdown files in its brain repo:
+Zoo Keeper's behavior and personality are defined by markdown files in `workspace/`:
 
 | File | Purpose |
 |------|---------|
@@ -151,7 +157,7 @@ Each agent's behavior is defined by markdown files in its brain repo:
 | `MEMORY.md` | Long-term curated memory |
 | `memory/` | Daily session logs |
 
-Zoo Keeper's files live in `workspace/`. Specialist files live in `brains/<agent-id>/`.
+Specialist agents have the same file structure in their own brain repos (`brains/<agent-id>/`).
 
 ### Memory
 
@@ -177,21 +183,21 @@ docker compose exec openclaw openclaw channels status  # Discord status
 ## Project Structure
 
 ```
-├── docker-compose.yml              # Builds + runs OpenClaw
+├── docker-compose.yml              # OpenClaw gateway + all agent mounts
 ├── .env.example                    # API keys template
 ├── setup.sh                        # Interactive setup helper
-├── setup-brains.sh                 # Clone/init brain repos
+├── setup-brains.sh                 # Clone/init specialist brain repos
 ├── ZooKeeperOrchestratorSpec.md    # Full product specification
 ├── ZooKeeperOverview.md            # Technical overview
 ├── state/
 │   └── openclaw.json               # Gateway + agent + Discord config
-├── workspace/                      # Zoo Keeper's brain (coordinator)
+├── workspace/                      # 🦍 Zoo Keeper's brain
 │   ├── AGENTS.md
 │   ├── SOUL.md
 │   ├── USER.md
 │   ├── MEMORY.md
 │   └── memory/
-└── brains/                         # Specialist brain repos (git clones)
+└── brains/                         # Specialist brains (cloned from GitHub)
     ├── frontend/                   # → DeFiZooKeeper/frontend-brain
     ├── backend/                    # → DeFiZooKeeper/backend-brain
     ├── solidity/                   # → DeFiZooKeeper/solidity-brain
