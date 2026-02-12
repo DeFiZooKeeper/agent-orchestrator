@@ -13,7 +13,9 @@
             "@DeFiZoo",
             "@defizoo",
             "@Zoo Keeper",
-            "@zookeeper"
+            "@zookeeper",
+            "@ZooKeeper",
+            "<@1470065481053638831>"
           ]
         }
       },
@@ -93,7 +95,13 @@
         "peer": { "kind": "channel", "id": "1470173926410686620" }
       }
     },
-    { "agentId": "coordinator", "match": { "channel": "discord" } }
+    {
+      "agentId": "coordinator",
+      "match": {
+        "channel": "discord",
+        "peer": { "kind": "channel", "id": "1470093995269947596" }
+      }
+    }
   ],
   "tools": {
     "agentToAgent": {
@@ -123,6 +131,7 @@
             "1470104466031116453": { "allow": true, "requireMention": false },
             "1470104475011121264": { "allow": true, "requireMention": false },
             "1470173926410686620": { "allow": true, "requireMention": false },
+            "1470093995269947596": { "allow": true, "requireMention": false },
             "*": { "allow": true, "requireMention": true }
           }
         }

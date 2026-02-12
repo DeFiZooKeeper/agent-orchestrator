@@ -14,13 +14,27 @@
 #   docker compose up -d        # build + start
 #   docker compose logs -f      # watch it boot
 #
+# Control UI: http://localhost:18789  (NOT 0.0.0.0 — needs secure context)
+#
 # Docs: https://docs.openclaw.ai/channels/discord
 #       https://docs.openclaw.ai/concepts/multi-agent
 # ============================================================
 
-version: '3.8'
-
 services:
+  # Fix volume ownership before the gateway starts.
+  # The named volume is created by Docker as root; OpenClaw runs as uid 1000 (node).
+  openclaw-init:
+    image: alpine:3.20
+    container_name: openclaw-init
+    restart: "no"
+    command:
+      - sh
+      - "-c"
+      - |
+        chown -R 1000:1000 /data
+    volumes:
+      - openclaw_config:/data
+
   openclaw:
     build:
       context: "https://github.com/openclaw/openclaw.git#v2026.2.6"
@@ -28,21 +42,31 @@ services:
     container_name: openclaw-gateway
     restart: unless-stopped
     init: true
-    user: root
+    env_file:
+      - .env
+    depends_on:
+      openclaw-init:
+        condition: service_completed_successfully
 
+    # Host-side 127.0.0.1 binding keeps the gateway off the network.
+    # Inside the container the gateway binds to lan (0.0.0.0) so Docker
+    # port-forwarding can reach it.  Access the Control UI at
+    # http://localhost:${OPENCLAW_PORT} (secure context).
     ports:
-      - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
+      - "127.0.0.1:${OPENCLAW_PORT:-18789}:${OPENCLAW_PORT:-18789}"
 
     environment:
       - HOME=/home/node
       - TERM=xterm-256color
       - NODE_ENV=production
       - TZ=${TZ:-UTC}
-      # Gateway
+      # Gateway — "lan" is required in Docker so port-forwarding works.
+      # Docs: https://docs.openclaw.ai/gateway/configuration-reference#gateway
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
       - OPENCLAW_GATEWAY_BIND=${OPENCLAW_GATEWAY_BIND:-lan}
-      - OPENCLAW_GATEWAY_PORT=18789
+      - OPENCLAW_GATEWAY_PORT=${OPENCLAW_PORT:-18789}
       - OPENCLAW_DISABLE_BONJOUR=1
+      - GOG_KEYRING_PASSWORD=${GOG_KEYRING_PASSWORD:-}
       # LLM providers
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -77,9 +101,12 @@ services:
         mkdir -p ~/.local/bin ~/.local/share ~/.npm-global \
                  ~/.openclaw/credentials
 
+        # Keep npm global installs writable for non-root runtime.
+        npm config set prefix ~/.npm-global
+
         # Create agent session directories
         for agent in coordinator frontend backend solidity hr marketing; do
-          mkdir -p ~/.openclaw/agents/$agent/sessions
+          mkdir -p ~/.openclaw/agents/$$agent/sessions
         done
 
         # Create openclaw CLI alias
@@ -100,18 +127,26 @@ services:
             || echo "[setup] opencode install failed (non-fatal)"
         fi
 
-        # Run doctor first
+        # Apply config BEFORE doctor so doctor validates the real config.
+        cp /mnt/state/openclaw.json ~/.openclaw/openclaw.json
+
+        # Doctor: diagnose + migrate. Docs: https://docs.openclaw.ai/gateway/doctor
         openclaw doctor
         sleep 1
 
-        # Apply our config
-        cp /mnt/state/openclaw.json ~/.openclaw/openclaw.json
-
-        # Start gateway
-        exec node dist/index.js gateway --bind lan --port 18789 --allow-unconfigured
+        # Start gateway in the foreground (no systemd in containers).
+        # --bind must be one of: loopback | lan | tailnet | auto | custom
+        exec node dist/index.js gateway \
+          --bind "$${OPENCLAW_GATEWAY_BIND}" \
+          --port "$${OPENCLAW_GATEWAY_PORT}" \
+          --allow-unconfigured
 
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:18789/health"]
+      test:
+        [
+          "CMD-SHELL",
+          "node dist/index.js health --token \"$OPENCLAW_GATEWAY_TOKEN\"",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
